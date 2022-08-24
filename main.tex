@@ -1,0 +1,58 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage{tgbonum}
+\usepackage{blindtext}
+
+\begin{document}
+	
+% TITLE PAGE
+\thispagestyle{empty}
+{ \centering
+	CERN
+	\vspace*{0.5cm}
+	
+	\footnotesize
+	Summer Student Project Report\\
+	\huge
+	{\sc Creating Tubes in VecGeom's Surface Model}\\
+	\vspace{0.4cm}
+	\footnotesize
+	\begin{tabular}{l c r}
+		student: & \hspace{3cm}\ & supervisor:\\
+		Dušan Cvijetić\footnotemark, && Dr. Andrei Gheata, \\
+		\scriptsize University of Belgrade && \scriptsize CERN EP-SFT
+	\end{tabular}
+	\footnotetext{\fontfamily{qcr}\selectfont dusancvijetic2000@gmail.com}
+	
+	\normalsize
+	\vspace{0.5cm}
+	Geneve,\\
+	\today
+	\vspace{2cm}
+		
+	
+}
+
+\begin{abstract}
+	\blindtext
+\end{abstract}
+
+\newpage
+\tableofcontents
+
+\section{Introduction}
+
+Simulating geometry is a necessary part of any detector simulation in high energy physics. It introduces constraints to a given problem, bounding physical properties to regions of space.
+
+One of the most important tasks geometry model has is navigation of moving particles. It must provide information on where the particle currently is, so that interactions with material can be properly simulated, but also predict where will the particle hit boundary of the current region. This prediction is done through checking ray--boundary intersections, so as to see whether the particle's trajectory leads it to exit the current region and pass into another.
+
+Traditionally, this was done for a single particle and a single potential intersection. However, with the advent of powerful GPU technologies in the recent years, a question arises if there is possibility for parallelization, and therefore speedup, of this process. As the simulation of particle movement is one of the most resource-intensive tasks of collision simulations, its acceleration would be very valuable. VecGeom library is an effort in this direction.
+
+Old models used the concept of solids (3D volumes) to represent the elements of a detector. However, GPU parallelization over the solid structures turns out to be quite inefficient, for they tend to use many registers and exhibit a lot of divergence. A promising approach to solving these problems is decomposing the volumes into surfaces, lowering register usage and producing less divergent algorithms.
+
+
+\subsection{Bounded Surface Model}
+
+
+
+\end{document}
