@@ -95,6 +95,29 @@ The purpose of an extent is to cut down the number of frames that have to be che
 
 Two framed surfaces can also lie on a same common surface and have opposite orientations (i.e. two planes with parallel normals that point in opposite directions). Such cases are treated by decomposing a common surface into two sides. The extents, then, are computed for each side, and not for the whole common surface, and which side should be checked is determined by navigation algorithm.
 
+
 \section{Implementation}
+
+The implementation of described structure in a way that can run on both CPU and GPU presents many constraints. For one, all structures and functions must be templated, so that appropriate data types can be used depending on architecture the code is running on. Dynamic memory allocation cannot be used in algorithms meant to run on GPU. Inheritance mechanism also cannot be utilized, and so virtual functions can't be created.
+
+The initial architecture of Surface Model library was in its prototypal phase. There was some confusion with structure names, the delegation of responsibility was in many places inappropriate, and overall scalability was quite bad. The restructuring had to be done to allow further development.
+
+All the data needed for geometry is stored within SurfData structure. This allows greater control over memory allocation and better GPU compatibility. On top of that, various structures are implemented to represent the elements of the surface model: Range, Extent, UnplacedSurface, Frame, FramedSurface, Side and CommonSurface.
+
+//TODO: UML diagram of old architecture.
+
+Range structure had two real numbers as its members, and was meant for data storage. It implemented a few basic operations, like getting and setting its members. Transformation was a class for moving around the produced surfaces into their places.
+
+Extent data structure was comprised of two Ranges and was meant to represent various types of both frames and extents. This introduced confusion about its purpose, and produced messy and repetitive code (for example, the same checks had to be made in both Frame and CommonSurface structures). The limitation of using only two Range objects to represent any possible frame or extent resulted in impossibility to specialize structures based on their purpose. To some extent, it was possible to bypass this limitation through specializing generation algorithms, but even with this some shapes couldn't fit into four real numbers however ingenious the conjured solution was. This structure was the main culprit of many problems that arose throughout development.
+
+UnplacedSurface represented infinite surfaces before they were framed.
+
+Frame provided more general interface for connecting the UnplacedSurfaces with Extent objects. It kept the info about the Extent type and the Extent data itself as its members. The algorithm for checking if the point lies within the extent was implemented inside the Frame in two variants: one was meant for framed surfaces, and the other, static one, for checking extents on common surfaces.
+
+FramedSurfaces were used to connect Extents with UnplacedSurfaces. Sides and CommonSurfaces were used for grouping of FramedSurfaces, as told before.
+
+The reorganization of described architecture 
+
+
 
 \end{document}
