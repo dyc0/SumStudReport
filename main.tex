@@ -3,6 +3,13 @@
 \usepackage{tgbonum}
 \usepackage{blindtext}
 
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{multicol}
+
+\usepackage[mode=buildnew]{standalone}% requires -shell-escape
+\usepackage{tikz}
+
 \begin{document}
 	
 % TITLE PAGE
@@ -28,16 +35,19 @@
 	\vspace{0.5cm}
 	Geneve,\\
 	\today
-	\vspace{2cm}
 		
 	
 }
 
+\vfill
 \begin{abstract}
 	\blindtext
 \end{abstract}
+\vfill
 
 \newpage
+
+
 \tableofcontents
 
 \section{Introduction}
@@ -51,8 +61,40 @@ Traditionally, this was done for a single particle and a single potential inters
 Old models used the concept of solids (3D volumes) to represent the elements of a detector. However, GPU parallelization over the solid structures turns out to be quite inefficient, for they tend to use many registers and exhibit a lot of divergence. A promising approach to solving these problems is decomposing the volumes into surfaces, lowering register usage and producing less divergent algorithms.
 
 
-\subsection{Bounded Surface Model}
+\section{Bounded Surface Model}
 
+There are a few approaches to implementing surface models for geometry simulations, including triangulation or half-space decomposition. VecGeom, however, uses the bounded surface model.
 
+To create a shape in this model, it is necessary to decompose a solid into its limiting surfaces. At first, infinite surfaces are generated. Creating a useful structure from infinite surfaces is then done by using frames, which delimit the area that really exist from the virtual one (figure \ref{fig:mask}). If a particle is traveling through space and hits the surface, it also has to check if it has landed within the frame. If not, then the collision wasn't real and should be ignored. If yes, then the surface was really hit and it should be checked how this affects the particle's state (i.e. what are the two regions between which a particle is crossing through a surface).
+\begin{figure}[h]
+	\centering
+	\includestandalone[width = 0.4\textwidth]{Figures/cylinder3_construction}
+	\caption{Frame on an infinite cylinder creates a framed cylindrical surface.}
+	\label{fig:mask}
+\end{figure}
+
+Depending on the setup, it may happen that certain surfaces lie in each other's extensions. Planes might share a common normal (figure \ref{fig:commonSurf}), or cylinders might have the same axes and radii. In such cases, it is useful to group these smaller structures into a common surface object.
+\begin{figure}[h]
+	\centering
+	\includestandalone[width = 0.7\textwidth]{Figures/extents}
+	\caption{Masked planar surfaces that share a common normal.}
+	\label{fig:commonSurf}
+\end{figure}
+
+A common surface is, just like before, created so that it extends to infinity. That is not very practical, and a way must be found to delimit the useful area from its virtual part. Unlike before, when frames were used to limit the surfaces based on solid's parameters, the useful part of a common surface is determined by the placement and masks of framed surfaces that make it.
+
+To delimit common surfaces, a structure called extent is used. Extents are akin to frames, only they represent "bounding boxes" for all framed surfaces on a common surface. They are the predefined geometrical structures with smallest possible area that covers all the frames. (Figure \ref{fig:extent})
+\begin{figure}[h]
+	\centering
+	\includestandalone[width = 0.7\textwidth]{Figures/extents2}
+	\caption{Rectangular extent on a planar common surface. At first, all that the particle sees is an extent. Frames are checked only if the extent is hit.}
+	\label{fig:extent}
+\end{figure}
+
+The purpose of an extent is to cut down the number of frames that have to be checked. When a particle is traversing the space and can potentially hit a certain common surface, the first step is to check whether its trajectory intersects the common surface within its extent. If not, then there is no possibility that the particle will hit any of the framed surfaces, and their frames don't have to be checked separately. Since it is much more common for a particle not to hit within an extent than to hit it, this optimization provides substantial speedup to the navigating algorithm.
+
+Two framed surfaces can also lie on a same common surface and have opposite orientations (i.e. two planes with parallel normals that point in opposite directions). Such cases are treated by decomposing a common surface into two sides. The extents, then, are computed for each side, and not for the whole common surface, and which side should be checked is determined by navigation algorithm.
+
+\section{Implementation}
 
 \end{document}

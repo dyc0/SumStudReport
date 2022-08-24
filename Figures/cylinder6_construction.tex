@@ -1,0 +1,25 @@
+\documentclass[tikz]{standalone}
+\begin{document}
+	\begin{tikzpicture}
+		
+		\draw (-1.25,2) -- (-1.25,-2);
+		\draw (-1.25,2) arc (180:360:1.25 and -0.5);
+		
+		\draw[red, ->] (-2.5,0,0) -- (3,0,0) node[below left=-3]{$x$};
+		\draw[green, ->] (0,0,1.5) -- (0,0,-5) node[above=-1]{$y$};
+		\draw[orange,] (0,-3,0) -- (0,2,0);
+		
+		
+		\fill [yellow, semitransparent] (-1.25,-2) -- (-1.25, 2) arc (180:360:1.25 and 0.5) -- (1.25,-2) arc (0:180:1.25 and -0.5);
+		\fill [yellow, semitransparent](0,2) ellipse (1.25 and 0.5);
+		\draw (-1.25,2) arc (180:360:1.25 and 0.5);
+		\draw (-1.25,-2) arc (180:360:1.25 and 0.5);
+		\draw [dashed] (-1.25,-2) arc (180:360:1.25 and -0.5);
+		\draw (1.25,-2) -- (1.25,2);
+		
+		
+		\draw[green] (0,0,5) -- (0,0,1.5);
+		\draw[orange, ->] (0,2,0) -- (0,3,0) node[right=-1]{$z$};
+		
+	\end{tikzpicture}
+\end{document}
