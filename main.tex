@@ -21,7 +21,7 @@
 	\footnotesize
 	Summer Student Project Report\\
 	\huge
-	{\sc Creating Tubes in VecGeom's Surface Model}\\
+	{\sc Converting Solids to VecGeom's Surface Model}\\
 	\vspace{0.4cm}
 	\footnotesize
 	\begin{tabular}{l c r}
@@ -100,24 +100,96 @@ Two framed surfaces can also lie on a same common surface and have opposite orie
 
 The implementation of described structure in a way that can run on both CPU and GPU presents many constraints. For one, all structures and functions must be templated, so that appropriate data types can be used depending on architecture the code is running on. Dynamic memory allocation cannot be used in algorithms meant to run on GPU. Inheritance mechanism also cannot be utilized, and so virtual functions can't be created.
 
-The initial architecture of Surface Model library was in its prototypal phase. There was some confusion with structure names, the delegation of responsibility was in many places inappropriate, and overall scalability was quite bad. The restructuring had to be done to allow further development.
 
-All the data needed for geometry is stored within SurfData structure. This allows greater control over memory allocation and better GPU compatibility. On top of that, various structures are implemented to represent the elements of the surface model: Range, Extent, UnplacedSurface, Frame, FramedSurface, Side and CommonSurface.
+\subsection{The old architecture}
+
+The initial architecture of Surface Model library was in its prototypal phase. There was some confusion with structure names, the delegation of responsibility was in many places inappropriate, and overall scalability was quite bad. The restructuring had to be done for further development to be possible.
+
+All the data needed for geometry was stored within SurfData structure. This allows greater control over memory allocation and better GPU compatibility. On top of that, various structures were implemented to represent the elements of the surface model: RangeMask, Extent, UnplacedSurface, Frame, FramedSurface, Side and CommonSurface.
 
 //TODO: UML diagram of old architecture.
 
-Range structure had two real numbers as its members, and was meant for data storage. It implemented a few basic operations, like getting and setting its members. Transformation was a class for moving around the produced surfaces into their places.
+RangeMask structure had two real numbers as its members, and was meant for data storage. It implemented a few basic operations, like getting and setting its members. Transformation was a class for moving around the produced surfaces into their places.
 
-Extent data structure was comprised of two Ranges and was meant to represent various types of both frames and extents. This introduced confusion about its purpose, and produced messy and repetitive code (for example, the same checks had to be made in both Frame and CommonSurface structures). The limitation of using only two Range objects to represent any possible frame or extent resulted in impossibility to specialize structures based on their purpose. To some extent, it was possible to bypass this limitation through specializing generation algorithms, but even with this some shapes couldn't fit into four real numbers however ingenious the conjured solution was. This structure was the main culprit of many problems that arose throughout development.
+Extent data structure was comprised of two RangeMasks and was meant to represent various types of both frames and extents. This introduced confusion about its purpose, and produced messy and repetitive code (for example, the same checks had to be made for both Frame and CommonSurface structures). The limitation of using only two Range objects to represent any possible frame or extent resulted in impossibility to specialize structures based on their purpose. To some extent, it was possible to bypass this limitation through specializing generation algorithms, but even when such hacks were utilized, some shapes still couldn't fit into four real numbers however ingenious the conjured solution was. This structure was the main culprit of many problems that arose throughout development.
 
 UnplacedSurface represented infinite surfaces before they were framed.
 
-Frame provided more general interface for connecting the UnplacedSurfaces with Extent objects. It kept the info about the Extent type and the Extent data itself as its members. The algorithm for checking if the point lies within the extent was implemented inside the Frame in two variants: one was meant for framed surfaces, and the other, static one, for checking extents on common surfaces.
+Frame provided more general interface for connecting the UnplacedSurfaces with Extent objects. It kept the info about the Extent type and the Extent itself as its members. The algorithm for checking if the point lies within the extent was implemented inside the Frame in two variants: one was meant for framed surfaces, and the other, static one, for checking extents on common surfaces.
 
-FramedSurfaces were used to connect Extents with UnplacedSurfaces. Sides and CommonSurfaces were used for grouping of FramedSurfaces, as told before.
-
-The reorganization of described architecture 
+FramedSurfaces were used to connect Frames with UnplacedSurfaces. Sides and CommonSurfaces were used for grouping of FramedSurfaces, as told before. Sides used Extents for delimiting the useful area.
 
 
+\subsection{The new architecture}
+
+The new architecture used for implementation of surface model had to be scalable, as new types of objects should eventually be supported by the library. This was provided through better object decomposition and delegation of responsibility.
+
+Range structure was done away with, and replaced by more general Vec2D structure, with some new operations implemented (such as vector subtraction or quasi cross product for z-component calculation). Depending on the use case, Vec2D was aliased as Range, Point2D, or AngleVector. 
+
+The major restructuring was done on frames and extents. Firstly, the new structures, called Masks, were introduced. Masks serve as low-level implementations of various possible shapes that frames and extents can take, allowing for specialization of different types. All mask structures, apart from constructor, have an {\fontfamily{qcr}\selectfont Inside()} member function, whose purpose is to check if a given point lies within mask's shape. Currently, there are only five masks implemented:
+\begin{description}
+	\item [WindowMask] represents a rectangular mask on a planar surface;
+	\item [RingMask] represents a surface extending between two circular segments, one with radius $r_{min}$ and the other $r_{max}$, starting at an angle $\varphi_{min}$ and extending to $\varphi_{max}$;
+	\item [ZPhiMask] represents a mask delimiting a cylindrical surface segment along z-axis, starting from $z_{min}$ and extending to $z_{max}$, and spanning between angles $\varphi_{min}$ and $\varphi_{max}$;
+	\item[TriangularMask\footnotemark] represents a triangular mask on a planar surface and
+	\item[QuadrilateralMask] represents a convex quadrilateral mask on a planar surfacel,
+\end{description}
+but the number of mask types should still grow.
+\footnotetext{These have not been tested yet.}
+
+//TODO: UML of new structure here
+
+The Frame remains as an interface between Mask and Surface. Since the usage of virtual mechanism was not allowed, selecting the right {\fontfamily{qcr}\selectfont Inside()} function for applied mask is done through a switch statement in Frame structure's own {\fontfamily{qcr}\selectfont Inside()} function. Case is selected based on a mask type, a parameter that is stored as data member.
+
+On Sides, extents are now not implemented as a special class, but rather as an aliased Frame objects. That way, there is much less code duplication, and logically the same mechanisms are kept as a single piece of code. This also allows Masks to be used on both UnplacedSurfaces (through Frames) and Sides. The type of a mask on an extent is enforced upon extent's creation, so that the planar sides will always be delimited by WindowMasks, and Cylinders by ZPhiMasks.
+
+With these modifications, model's scalability was increased, and it has become more straightforward to implement new masks and solid-surface conversions.
+
+
+\section{Implementing shapes}
+
+\subsection{Tube}
+
+The only solid-to-surface conversion that was already done at the start of this project was for cube solids. Implementing tube surfaces posed a few new challenges.
+
+In general, tubes occupy region delimited by two coaxial cylinders with different radii, between some non-zero non-equal starting and ending angles, and with finite length along axis. If the angles are equal, the tube's cross section is a full circle. If inner radius is zero, the tube is not hollow.
+
+Firstly, an algorithm was written for calculating the distance between a point in space and cylindrical surface along a given direction. As only the planes have been implemented earlier, this was the first second-order system of equations that needed to be solved, and the simple and fast quadratic equation solver was implemented.
+
+RingMasks and ZPhiMasks were introduced for framing surfaces that constitute tube. In general, there were six of those: outer and inner cylindrical surfaces with ZPhiMasks, top and bottom cap with RingMasks and two planar sides for covering the phi-cut of the cylinder with WindowMasks.
+
+
+\subsection{Trapezoidal prism}
+
+Another new solid whose conversion has been implemented is trapezoidal prism. It consists of top and bottom planar surfaces with rectangular masks of (in general) different sizes, and four planar side surfaces with quadrilateral masks. The optimization was introduced so that WindowMasks are created instead of QuadrilateralMasks whenever possible, since running the {\fontfamily{qcr}\selectfont Inside()} check then becomes simpler.
+
+
+\subsection{Testing}
+
+Validation and benchmarking was performed by simulating a calorimeter with varying number of layers, each consisting of a gap and an absorber.
+
+For testing tubes, a tubular non-hollow calorimeter extending along z axis and spanning full $360^\circ$ was used, filled with tubular layers with same outer radius as calorimeter, but which had both inner radius and a cut in phi.
+
+Testing trapezoidal prisms was done using a calorimeter with trapezoidal cross-section in yz plane and extending along x axis. It was filled with layers with the same cross-section, but made shorter in x direction, along which they were stacked.
+
+The particles were created in a region inside and around the calorimeter, with random positions and velocity directions. The surface model was checked against the old solid-based model to see if the same result is produced. Time was also measured for simulations using both the solid-based and bounded surface models, and surfaces always performed at least as good as solids, often even outperforming them.
+
+\begin{figure}[h]
+\begin{minipage}{0.45\textwidth}
+		\centering
+		\includestandalone[width = \textwidth]{Figures/testTubes}
+\end{minipage}
+\begin{minipage}{0.45\textwidth}
+	\centering
+	\includestandalone[width = \textwidth]{Figures/testTubes2}
+\end{minipage}
+\caption{Example of a setup for tube testing.}
+\label{fig:testTubes}
+\end{figure}
+
+
+\section{Conclusions}
+
+ 
 
 \end{document}
