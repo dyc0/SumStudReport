@@ -137,7 +137,10 @@ The major restructuring was done on frames and extents. Firstly, the new structu
 but the number of mask types should still grow.
 \footnotetext{These have not been tested yet.}
 
-//TODO: UML of new structure here
+\begin{figure}[h]
+	\includegraphics[width=\textwidth]{Figures/diagram_old.png}
+	\caption{Architecture after redesign. Mask structure doesn't really exist, because virtual mechanism cannot be utilized. It is just an illustration of similarity between different mask structures, and not a real parent.}
+\end{figure}
 
 The Frame remains as an interface between Mask and Surface. Since the usage of virtual mechanism was not allowed, selecting the right {\fontfamily{qcr}\selectfont Inside()} function for applied mask is done through a switch statement in Frame structure's own {\fontfamily{qcr}\selectfont Inside()} function. Case is selected based on a mask type, a parameter that is stored as data member.
 
@@ -190,6 +193,17 @@ The particles were created in a region inside and around the calorimeter, with r
 
 \section{Conclusions}
 
+ In this report, an overview of the bounded surface model was given. Its implementation was still just an early prototype at the beginning of this summer, but changes that were introduced provided better scalability and more understandable code. There is, of course, still space left for further restructuring. Many header files are still too big and need to be recomposed into multiple smaller headers, which is a nontrivial task, thanks to omnipresent circular dependence of various components.
  
+ Four new mask types have been implemented. Apart from rectangles, it is now possible to mask rings, triangles, quadrilaterals and cylinders. Of course, this is just a beginning and at least as many more masks are needed for the library to become robust enough for real applications. A particular challenge lies with composite masks, and careful planning must be done before their implementation is started.
+ 
+ It is now also possible to create tubes and trapezoidal prisms, raising number of solids that can be converted into surface model to three. Though just a modest number, hopefully the changes to the old architecture will allow it to grow more rapidly now.
+ 
+ VecGeom's bounded surfaces library is a project still in its early development phase. Results so far have been promising, though a lot of work still remains to be done. Hopefully, in a few years we will have a robust and fast library for geometry simulations able to run on the GPU. 
+
+
+\section*{Thanks}
+
+It has been an honor and a joy to be a part of CERN's EP-SFT group and feel what real software development is like. I owe many thanks to my supervisor, Andrei Gheata, for his never ending patience and dedication to work with me during these two months. It has been a lovely experience.
 
 \end{document}
