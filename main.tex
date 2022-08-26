@@ -10,6 +10,8 @@
 \usepackage[mode=buildnew]{standalone}% requires -shell-escape
 \usepackage{tikz}
 
+\bibliographystyle{ieeetr}
+
 \begin{document}
 	
 % TITLE PAGE
@@ -39,24 +41,15 @@
 	
 }
 
-\vfill
-\begin{abstract}
-	\blindtext
-\end{abstract}
-\vfill
-
-\newpage
-
-
 \tableofcontents
 
 \section{Introduction}
 
 Simulating geometry is a necessary part of any detector simulation in high energy physics. It introduces constraints to a given problem, bounding physical properties to regions of space.
 
-One of the most important tasks geometry model has is navigation of moving particles. It must provide information on where the particle currently is, so that interactions with material can be properly simulated, but also predict where will the particle hit boundary of the current region. This prediction is done through checking ray--boundary intersections, so as to see whether the particle's trajectory leads it to exit the current region and pass into another.
+One of the most important tasks geometry model has is navigation of moving particles. It must provide information on where the particle currently is, so that interactions with material can be properly simulated, but also predict where will the particle hit boundary of the current region. This prediction is done through checking ray--boundary intersections, so as to see whether the particle's trajectory leads it to exit the current region and pass into another. \cite{Apostolakis_2018}
 
-Traditionally, this was done for a single particle and a single potential intersection. However, with the advent of powerful GPU technologies in the recent years, a question arises if there is possibility for parallelization, and therefore speedup, of this process. As the simulation of particle movement is one of the most resource-intensive tasks of collision simulations, its acceleration would be very valuable. VecGeom library is an effort in this direction.
+Traditionally, this was done for a single particle and a single potential intersection. However, with the advent of powerful GPU technologies in the recent years, a question arises if there is possibility for parallelization, and therefore speedup, of this process. As the simulation of particle movement is one of the most resource-intensive tasks of collision simulations, its acceleration would be very valuable. VecGeom library \cite{Apostolakis_2015} is an effort in this direction.
 
 Old models used the concept of solids (3D volumes) to represent the elements of a detector. However, GPU parallelization over the solid structures turns out to be quite inefficient, for they tend to use many registers and exhibit a lot of divergence. A promising approach to solving these problems is decomposing the volumes into surfaces, lowering register usage and producing less divergent algorithms.
 
@@ -64,17 +57,17 @@ Old models used the concept of solids (3D volumes) to represent the elements of 
 \section{Bounded Surface Model}
 
 There are a few approaches to implementing surface models for geometry simulations, including triangulation or half-space decomposition. VecGeom, however, uses the bounded surface model.
-
-To create a shape in this model, it is necessary to decompose a solid into its limiting surfaces. At first, infinite surfaces are generated. Creating a useful structure from infinite surfaces is then done by using frames, which delimit the area that really exist from the virtual one (figure \ref{fig:mask}). If a particle is traveling through space and hits the surface, it also has to check if it has landed within the frame. If not, then the collision wasn't real and should be ignored. If yes, then the surface was really hit and it should be checked how this affects the particle's state (i.e. what are the two regions between which a particle is crossing through a surface).
-\begin{figure}[h]
+\begin{figure}[h!]
 	\centering
 	\includestandalone[width = 0.4\textwidth]{Figures/cylinder3_construction}
 	\caption{Frame on an infinite cylinder creates a framed cylindrical surface.}
 	\label{fig:mask}
 \end{figure}
 
-Depending on the setup, it may happen that certain surfaces lie in each other's extensions. Planes might share a common normal (figure \ref{fig:commonSurf}), or cylinders might have the same axes and radii. In such cases, it is useful to group these smaller structures into a common surface object.
-\begin{figure}[h]
+To create a shape in this model, it is necessary to decompose a solid into its limiting surfaces. At first, infinite surfaces are generated. Then, \textit{frames} are created on each infinite surface, defining the actual limits of the solid on that surface. Frames provide a masking operation delimiting the real from the virtual parts of the infinite surface, in a local reference frame. To describe the boundaries of the original solid, the frames must be properly rotated and translated to be placed in the correct positions on the infinite support surfaces. The combination of infinite unplaced surfaces and placed frames defines what is called a framed surface, which completely describes one face of the modeled solid. (figure \ref{fig:mask}). If a particle is traveling through space and hits the surface, it also has to check if it has landed within the frame. If not, then the collision wasn't real and should be ignored. If yes, then the surface was really hit and it should be checked how this affects the particle's state (i.e. what are the two regions between which a particle is crossing through a surface).
+
+Depending on the setup, it may happen that certain support infinite surfaces are overlapping, although the corresponding object frames are different. Planes might share a common normal (figure \ref{fig:commonSurf}), or cylinders might have the same axes and radii. In such cases, it is useful to group these smaller structures into a common surface object.
+\begin{figure}[h!]
 	\centering
 	\includestandalone[width = 0.7\textwidth]{Figures/extents}
 	\caption{Masked planar surfaces that share a common normal.}
@@ -83,7 +76,7 @@ Depending on the setup, it may happen that certain surfaces lie in each other's 
 
 A common surface is, just like before, created so that it extends to infinity. That is not very practical, and a way must be found to delimit the useful area from its virtual part. Unlike before, when frames were used to limit the surfaces based on solid's parameters, the useful part of a common surface is determined by the placement and masks of framed surfaces that make it.
 
-To delimit common surfaces, a structure called extent is used. Extents are akin to frames, only they represent "bounding boxes" for all framed surfaces on a common surface. They are the predefined geometrical structures with smallest possible area that covers all the frames. (Figure \ref{fig:extent})
+To delimit multiple placed frames on the same common surface, a structure called extent is used. Extents are akin to frames, only they represent "bounding boxes" for all framed surfaces on a common surface. They are the predefined geometrical structures with the smallest possible area that covers all the frames. (Figure \ref{fig:extent})
 \begin{figure}[h]
 	\centering
 	\includestandalone[width = 0.7\textwidth]{Figures/extents2}
@@ -91,23 +84,27 @@ To delimit common surfaces, a structure called extent is used. Extents are akin 
 	\label{fig:extent}
 \end{figure}
 
-The purpose of an extent is to cut down the number of frames that have to be checked. When a particle is traversing the space and can potentially hit a certain common surface, the first step is to check whether its trajectory intersects the common surface within its extent. If not, then there is no possibility that the particle will hit any of the framed surfaces, and their frames don't have to be checked separately. Since it is much more common for a particle not to hit within an extent than to hit it, this optimization provides substantial speedup to the navigating algorithm.
+The purpose of an extent is to avoid expensive individual frame crossing checks for particles traversing a common surface outside the extent area. Since it is much more likely for a particle not to hit within an extent than to hit it, this optimization provides substantial speedup to the navigating algorithm.
 
-Two framed surfaces can also lie on a same common surface and have opposite orientations (i.e. two planes with parallel normals that point in opposite directions). Such cases are treated by decomposing a common surface into two sides. The extents, then, are computed for each side, and not for the whole common surface, and which side should be checked is determined by navigation algorithm.
+Two framed surfaces can also lie on a same common surface and have opposite orientations (i.e. two planes with parallel normals that point in opposite directions). Such cases are treated by decomposing a common surface into two sides. The extents, then, are computed for each side, and not for the whole common surface, and which side should be checked is determined by the navigation algorithm.
 
 
 \section{Implementation}
 
-The implementation of described structure in a way that can run on both CPU and GPU presents many constraints. For one, all structures and functions must be templated, so that appropriate data types can be used depending on architecture the code is running on. Dynamic memory allocation cannot be used in algorithms meant to run on GPU. Inheritance mechanism also cannot be utilized, and so virtual functions can't be created.
+The implementation of described structure in a way that can run on both CPU and GPU presents many constraints. The model must be implemented in header files, to avoid CPU-GPU portability issues. All data structures are templated on a type representing the floating point precision, to allow for on-demand single-precision support. Dynamic memory allocation cannot be used in algorithms meant to run on GPU. Inheritance mechanism also cannot be utilized, and so virtual functions can't be created.
 
 
 \subsection{The old architecture}
 
-The initial architecture of Surface Model library was in its prototypal phase. There was some confusion with structure names, the delegation of responsibility was in many places inappropriate, and overall scalability was quite bad. The restructuring had to be done for further development to be possible.
+The initial architecture of the Surface Model library is in its prototype phase. Before I started contributing, there was some confusion with structure names, the delegation of responsibility was in many places inappropriate, and the overall scalability while extending the model to all supported solid types was quite bad. The restructuring had to be done for further development to be possible.
 
 All the data needed for geometry was stored within SurfData structure. This allows greater control over memory allocation and better GPU compatibility. On top of that, various structures were implemented to represent the elements of the surface model: RangeMask, Extent, UnplacedSurface, Frame, FramedSurface, Side and CommonSurface.
 
-//TODO: UML diagram of old architecture.
+\begin{figure}[h]
+	\includegraphics[width=\textwidth]{Figures/diagram_old.png}
+	\caption{Snippet of architecture diagram before the redesign. There is inconsistency in the way Extents interact with higher level structures, and specialization is not possible.}
+	\label{fig:oldarch}
+\end{figure}
 
 RangeMask structure had two real numbers as its members, and was meant for data storage. It implemented a few basic operations, like getting and setting its members. Transformation was a class for moving around the produced surfaces into their places.
 
@@ -118,6 +115,8 @@ UnplacedSurface represented infinite surfaces before they were framed.
 Frame provided more general interface for connecting the UnplacedSurfaces with Extent objects. It kept the info about the Extent type and the Extent itself as its members. The algorithm for checking if the point lies within the extent was implemented inside the Frame in two variants: one was meant for framed surfaces, and the other, static one, for checking extents on common surfaces.
 
 FramedSurfaces were used to connect Frames with UnplacedSurfaces. Sides and CommonSurfaces were used for grouping of FramedSurfaces, as told before. Sides used Extents for delimiting the useful area.
+
+The diagram of the old architecture is given in figure \ref{fig:oldarch}.
 
 
 \subsection{The new architecture}
@@ -138,24 +137,27 @@ but the number of mask types should still grow.
 \footnotetext{These have not been tested yet.}
 
 \begin{figure}[h]
-	\includegraphics[width=\textwidth]{Figures/diagram_old.png}
+	\includegraphics[width=\textwidth]{Figures/diagram_new.png}
 	\caption{Architecture after redesign. Mask structure doesn't really exist, because virtual mechanism cannot be utilized. It is just an illustration of similarity between different mask structures, and not a real parent.}
+	\label{fig:newarch}
 \end{figure}
 
 The Frame remains as an interface between Mask and Surface. Since the usage of virtual mechanism was not allowed, selecting the right {\fontfamily{qcr}\selectfont Inside()} function for applied mask is done through a switch statement in Frame structure's own {\fontfamily{qcr}\selectfont Inside()} function. Case is selected based on a mask type, a parameter that is stored as data member.
 
 On Sides, extents are now not implemented as a special class, but rather as an aliased Frame objects. That way, there is much less code duplication, and logically the same mechanisms are kept as a single piece of code. This also allows Masks to be used on both UnplacedSurfaces (through Frames) and Sides. The type of a mask on an extent is enforced upon extent's creation, so that the planar sides will always be delimited by WindowMasks, and Cylinders by ZPhiMasks.
 
-With these modifications, model's scalability was increased, and it has become more straightforward to implement new masks and solid-surface conversions.
+The diagram of the new structure is shown in figure \ref{fig:newarch}.
+
+With these modifications, the model's scalability was increased, and it has become more straightforward to implement new masks and solid-surface conversions.
 
 
 \section{Implementing shapes}
 
 \subsection{Tube}
 
-The only solid-to-surface conversion that was already done at the start of this project was for cube solids. Implementing tube surfaces posed a few new challenges.
+The only solid-to-surface conversion that was already done at the start of this project was for box solids. Implementing tube surfaces posed a few new challenges.
 
-In general, tubes occupy region delimited by two coaxial cylinders with different radii, between some non-zero non-equal starting and ending angles, and with finite length along axis. If the angles are equal, the tube's cross section is a full circle. If inner radius is zero, the tube is not hollow.
+In general, tubes occupy the region delimited by two coaxial cylinders with different radii, between non-equal starting and ending angles, and within a finite length along the Z axis. If the angles are equal, the tube's cross-section is a full circle. If the inner radius is zero, the tube is not hollow.
 
 Firstly, an algorithm was written for calculating the distance between a point in space and cylindrical surface along a given direction. As only the planes have been implemented earlier, this was the first second-order system of equations that needed to be solved, and the simple and fast quadratic equation solver was implemented.
 
@@ -164,7 +166,7 @@ RingMasks and ZPhiMasks were introduced for framing surfaces that constitute tub
 
 \subsection{Trapezoidal prism}
 
-Another new solid whose conversion has been implemented is trapezoidal prism. It consists of top and bottom planar surfaces with rectangular masks of (in general) different sizes, and four planar side surfaces with quadrilateral masks. The optimization was introduced so that WindowMasks are created instead of QuadrilateralMasks whenever possible, since running the {\fontfamily{qcr}\selectfont Inside()} check then becomes simpler.
+Another new solid whose conversion has been implemented is the trapezoidal prism. It consists of top and bottom planar surfaces with rectangular masks of (in general) different sizes, and four planar side surfaces with quadrilateral masks. An optimization was introduced so that WindowMasks are created instead of QuadrilateralMasks whenever possible, since running the {\fontfamily{qcr}\selectfont Inside()} check then becomes simpler.
 
 
 \subsection{Testing}
@@ -204,6 +206,8 @@ The particles were created in a region inside and around the calorimeter, with r
 
 \section*{Thanks}
 
-It has been an honor and a joy to be a part of CERN's EP-SFT group and feel what real software development is like. I owe many thanks to my supervisor, Andrei Gheata, for his never ending patience and dedication to work with me during these two months. It has been a lovely experience.
+It has been an honor and a joy to be a part of CERN's EP-SFT group and feel what real software development is like. I owe many thanks to my supervisor, Andrei Gheata, for his never ending patience and dedication to working with me during these two months. It has been a lovely experience.
+
+\bibliography{Sources/sources}
 
 \end{document}
