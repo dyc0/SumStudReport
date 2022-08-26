@@ -1,3 +1,3 @@
-# SumStudReport
+# Abstract
 
 Simulating detector geometry is a complex and resource-intensive task. VecGeom library is an effort to provide speedup to these simulations by parallelizing code execution on the GPU. Models based on solids have been shown not to fit that task very well, and research is in progress to develop surface-based models that promise better resource usage on the GPU. In this report, the overview of VecGeom's bounded surface model is given. Restructuring is performed to allow for mask specialization and better scalability. New mask types are implemented, namely RingMasks, ZPhiMasks, TriangularMasks and QuadrilateralMasks. The conversion of two new solid types to surface model is implemented, allowing for tubes and trapezoidal prisms to now be used. A short overview of what was done is given, along with a promising speedup in simulations.
